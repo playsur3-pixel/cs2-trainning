@@ -4,6 +4,7 @@
   "version": "0.1.0",
   "type": "module",
   "scripts": {
+    "preinstall": "npm config get registry",
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview"
