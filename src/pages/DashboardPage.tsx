@@ -160,21 +160,6 @@ export function DashboardPage() {
         </Card>
       </section>
 
-      {/* Historique plus ancien */}
-      <section className="mt-8">
-        <Card>
-          <CardHeader>
-            <CardTitle>Historique — 10 jours précédents</CardTitle>
-            <div className="text-sm text-muted">
-              Les 10 jours avant le tableau principal (lecture seule).
-            </div>
-          </CardHeader>
-          {/* <CardContent>
-            <TrainingHistoryTable entries={entries} daysAgoFrom={20} days={10} />
-          </CardContent> */}
-        </Card>
-      </section>
-
       <footer className="mt-12 border-t border-border/40 py-8 text-center text-xs text-muted">
         © {new Date().getFullYear()} playSURE — Monitoring
       </footer>
