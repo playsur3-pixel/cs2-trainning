@@ -2,15 +2,8 @@ public/assets/hero-video-1.mp4
 public/assets/hero-video-2.mp4
 Enregistrement automatique Adobe After Effects/vidseo_accueil enregistrement automatique 3.aep
 vidseo_accueil.aep
+admin_init_player.ps1
 "node_modules" 
-<<<<<<< HEAD
-public/assets/hero-video-1.mp4
-public/assets/hero-video-2.mp4
-Enregistrement automatique Adobe After Effects/vidseo_accueil enregistrement automatique 3.aep
-vidseo_accueil.aep
-"node_modules" 
-=======
->>>>>>> b7a2d8981041c6a8d63ebb1fc86d91f37cf93126
 #OVERALL
 node_modules/
 dist/
