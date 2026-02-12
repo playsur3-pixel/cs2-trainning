@@ -1,4 +1,4 @@
-import { getStore } from "@netlify/blobs";
+import { getStore, connectLambda } from "@netlify/blobs";
 import { bearerToken, json } from "./_util.mjs";
 
 const MAX_DAYS = 60;
@@ -14,8 +14,9 @@ function cutoffIso() {
 
 // POST { entry: { date, weapon, kpm_immobile, kpm_cs } } -> { ok }
 // Requires Authorization: Bearer <token>
+export async function handler(event, context) {
+  connectLambda(event);
 
-export async function handler(event) {
   if (event.httpMethod !== "POST") return json(405, { error: "Method not allowed" });
 
   const token = bearerToken(event);
@@ -34,26 +35,28 @@ export async function handler(event) {
   }
 
   const entry = body?.entry;
-  if (!entry?.date || !entry?.weapon) {
-    return json(400, { error: "Missing entry" });
-  }
+  if (!entry?.date || !entry?.weapon) return json(400, { error: "Missing entry" });
 
-  const data = (await store.get(`data:${session.pseudo}`, { type: "json" })) || {
-    pseudo: session.pseudo,
-    entries: [],
-  };
+  const data =
+    (await store.get(`data:${session.pseudo}`, { type: "json" })) || ({
+      pseudo: session.pseudo,
+      entries: [],
+    });
 
   const entries = Array.isArray(data.entries) ? data.entries : [];
+
+  // remplace l'entrée du même jour si déjà existante
   const next = entries.filter((e) => e?.date !== entry.date);
   next.push(entry);
 
-  // purge > 60 days (lexicographic ISO works)
+  // purge > 60 jours (ISO tri lexicographique OK)
   const cut = cutoffIso();
   const purged = next
     .filter((e) => typeof e?.date === "string" && e.date >= cut)
     .sort((a, b) => String(a.date).localeCompare(String(b.date)));
 
   const out = { pseudo: session.pseudo, entries: purged };
+
   await store.set(`data:${session.pseudo}`, JSON.stringify(out), {
     contentType: "application/json",
   });
