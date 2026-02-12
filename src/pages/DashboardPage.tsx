@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Card, CardContent, CardHeader, CardTitle } from "../components/Card";
-import { TrainingHistoryTable, TrainingTable, type Entry } from "../components/TrainingTable";
+import { TrainingTable, type Entry } from "../components/TrainingTable";
 import { clearSession, getSession } from "../lib/auth";
 import { apiGetPlayer, apiSaveEntry } from "../lib/api";
 import { profile } from "../data/profile";

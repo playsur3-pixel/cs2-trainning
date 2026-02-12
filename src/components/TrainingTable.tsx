@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { cn } from "../lib/cn";
 
 export type WeaponKey = "glock" | "usp_s" | "m4a4" | "m4a1_s" | "ak47" | "galil";
@@ -27,16 +27,21 @@ function isoDay(d: Date) {
 }
 
 function shortDay(iso: string) {
-  // YYYY-MM-DD -> DD/MM
-  const [y, m, d] = iso.split("-");
+  const [, m, d] = iso.split("-");
   return `${d}/${m}`;
 }
 
 function parseFRFloat(v: string) {
-  const n = Number(v.replace(",", "."));
+  const t = v.trim();
+  if (!t) return null;
+  const n = Number(t.replace(",", "."));
   return Number.isFinite(n) ? n : null;
 }
 
+/**
+ * TrainingTable = TAB 1 (editable) + TAB 2 (read-only) + GRAPH
+ * Ordre: TAB1 -> TAB2 -> GRAPH
+ */
 export function TrainingTable({
   entries,
   todayDraft,
@@ -49,6 +54,8 @@ export function TrainingTable({
   onSave: () => void;
 }) {
   const today = useMemo(() => isoDay(new Date()), []);
+
+  // TAB 1 : J-10 ... J-1 + aujourd'hui
   const last10Days = useMemo(() => {
     const res: string[] = [];
     const d = new Date();
@@ -60,7 +67,20 @@ export function TrainingTable({
     return res;
   }, []);
 
-  const dayCols = useMemo(() => [...last10Days, today], [last10Days, today]);
+  const tab1Cols = useMemo(() => [...last10Days, today], [last10Days, today]);
+
+  // TAB 2 : J-20 ... J-11 (10 jours avant TAB 1)
+  const tab2Cols = useMemo(() => {
+    const res: string[] = [];
+    const base = new Date();
+    // J-20 -> J-11 inclus
+    for (let i = 20; i >= 11; i--) {
+      const tmp = new Date(base);
+      tmp.setDate(base.getDate() - i);
+      res.push(isoDay(tmp));
+    }
+    return res;
+  }, []);
 
   const byDay = useMemo(() => {
     const map = new Map<string, Entry>();
@@ -69,170 +89,174 @@ export function TrainingTable({
   }, [entries]);
 
   const todayEntry: Entry = todayDraft;
-
   const isEditing = byDay.has(today);
 
   return (
-    <div className="overflow-x-auto">
-      <table className="w-full min-w-[860px] border-collapse text-sm">
-        <thead>
-          <tr>
-            <th className="sticky left-0 z-10 bg-card/70 px-3 py-3 text-left text-xs font-semibold text-muted">
-              Jour
-            </th>
-            {dayCols.map((iso) => (
-              <th
-                key={iso}
-                className={cn(
-                  "px-3 py-3 text-left text-xs font-semibold",
-                  iso === today ? "text-text" : "text-muted"
-                )}
-              >
-                {shortDay(iso)}
+    <div className="grid gap-8">
+      {/* ========================= TAB 1 ========================= */}
+      <div className="overflow-x-auto">
+        <table className="w-full min-w-[860px] border-collapse text-sm">
+          <thead>
+            <tr>
+              <th className="sticky left-0 z-10 bg-card/70 px-3 py-3 text-left text-xs font-semibold text-muted">
+                Jour
               </th>
-            ))}
-          </tr>
-        </thead>
+              {tab1Cols.map((iso) => (
+                <th
+                  key={iso}
+                  className={cn(
+                    "px-3 py-3 text-left text-xs font-semibold",
+                    iso === today ? "text-text" : "text-muted"
+                  )}
+                >
+                  {shortDay(iso)}
+                </th>
+              ))}
+            </tr>
+          </thead>
 
-        <tbody>
-          {/* Row: Weapon */}
-          <tr className="border-t border-border/40">
-            <td className="sticky left-0 z-10 bg-card/70 px-3 py-3 text-xs text-muted">
-              Arme
-            </td>
-            {dayCols.map((iso) => {
-              const e = byDay.get(iso);
-              const isToday = iso === today;
-              if (!isToday) {
+          <tbody>
+            {/* Row: Weapon */}
+            <tr className="border-t border-border/40">
+              <td className="sticky left-0 z-10 bg-card/70 px-3 py-3 text-xs text-muted">
+                Arme
+              </td>
+              {tab1Cols.map((iso) => {
+                const e = byDay.get(iso);
+                const isToday = iso === today;
+
+                if (!isToday) {
+                  return (
+                    <td key={iso} className="px-3 py-3">
+                      {e ? WEAPONS.find((w) => w.key === e.weapon)?.label ?? "—" : "—"}
+                    </td>
+                  );
+                }
+
                 return (
                   <td key={iso} className="px-3 py-3">
-                    {e ? WEAPONS.find((w) => w.key === e.weapon)?.label ?? "—" : "—"}
+                    <select
+                      value={todayEntry.weapon}
+                      onChange={(ev) =>
+                        onChangeToday({ ...todayEntry, weapon: ev.target.value as WeaponKey })
+                      }
+                      className="w-full rounded-xl2 border border-border/60 bg-bg/40 px-2 py-2 text-sm outline-none focus:border-cs2/70"
+                    >
+                      {WEAPONS.map((w) => (
+                        <option key={w.key} value={w.key}>
+                          {w.label}
+                        </option>
+                      ))}
+                    </select>
                   </td>
                 );
-              }
-              return (
-                <td key={iso} className="px-3 py-3">
-                  <select
-                    value={todayEntry.weapon}
-                    onChange={(ev) => onChangeToday({ ...todayEntry, weapon: ev.target.value as any })}
-                    className="w-full rounded-xl2 border border-border/60 bg-bg/40 px-2 py-2 text-sm outline-none focus:border-cs2/70"
-                  >
-                    {WEAPONS.map((w) => (
-                      <option key={w.key} value={w.key}>
-                        {w.label}
-                      </option>
-                    ))}
-                  </select>
-                </td>
-              );
-            })}
-          </tr>
+              })}
+            </tr>
 
-          {/* Row: KPM immobile */}
-          <tr className="border-t border-border/40">
-            <td className="sticky left-0 z-10 bg-card/70 px-3 py-3 text-xs text-muted">
-              KPM immobile
-            </td>
-            {dayCols.map((iso) => {
-              const e = byDay.get(iso);
-              const isToday = iso === today;
-              if (!isToday) {
+            {/* Row: KPM immobile */}
+            <tr className="border-t border-border/40">
+              <td className="sticky left-0 z-10 bg-card/70 px-3 py-3 text-xs text-muted">
+                KPM immobile
+              </td>
+              {tab1Cols.map((iso) => {
+                const e = byDay.get(iso);
+                const isToday = iso === today;
+
+                if (!isToday) {
+                  return (
+                    <td key={iso} className="px-3 py-3">
+                      {typeof e?.kpm_immobile === "number" ? e.kpm_immobile.toFixed(2) : "—"}
+                    </td>
+                  );
+                }
+
                 return (
                   <td key={iso} className="px-3 py-3">
-                    {typeof e?.kpm_immobile === "number" ? e.kpm_immobile.toFixed(2) : "—"}
+                    <input
+                      inputMode="decimal"
+                      value={todayEntry.kpm_immobile ?? ""}
+                      onChange={(ev) =>
+                        onChangeToday({
+                          ...todayEntry,
+                          kpm_immobile: parseFRFloat(ev.target.value),
+                        })
+                      }
+                      className="w-full rounded-xl2 border border-border/60 bg-bg/40 px-2 py-2 text-sm outline-none focus:border-cs2/70"
+                    />
                   </td>
                 );
-              }
-              return (
-                <td key={iso} className="px-3 py-3">
-                  <input
-                    inputMode="decimal"
-                    value={todayEntry.kpm_immobile ?? ""}
-                    onChange={(ev) =>
-                      onChangeToday({ ...todayEntry, kpm_immobile: parseFRFloat(ev.target.value) })
-                    }
-                    className="w-full rounded-xl2 border border-border/60 bg-bg/40 px-2 py-2 text-sm outline-none focus:border-cs2/70"
-                    placeholder="ex: 1,25"
-                  />
-                </td>
-              );
-            })}
-          </tr>
+              })}
+            </tr>
 
-          {/* Row: KPM CS */}
-          <tr className="border-t border-border/40">
-            <td className="sticky left-0 z-10 bg-card/70 px-3 py-3 text-xs text-muted">
-              KPM CS
-            </td>
-            {dayCols.map((iso) => {
-              const e = byDay.get(iso);
-              const isToday = iso === today;
-              if (!isToday) {
+            {/* Row: KPM CS */}
+            <tr className="border-t border-border/40">
+              <td className="sticky left-0 z-10 bg-card/70 px-3 py-3 text-xs text-muted">
+                KPM CS
+              </td>
+              {tab1Cols.map((iso) => {
+                const e = byDay.get(iso);
+                const isToday = iso === today;
+
+                if (!isToday) {
+                  return (
+                    <td key={iso} className="px-3 py-3">
+                      {typeof e?.kpm_cs === "number" ? e.kpm_cs.toFixed(2) : "—"}
+                    </td>
+                  );
+                }
+
                 return (
                   <td key={iso} className="px-3 py-3">
-                    {typeof e?.kpm_cs === "number" ? e.kpm_cs.toFixed(2) : "—"}
+                    <input
+                      inputMode="decimal"
+                      value={todayEntry.kpm_cs ?? ""}
+                      onChange={(ev) =>
+                        onChangeToday({
+                          ...todayEntry,
+                          kpm_cs: parseFRFloat(ev.target.value),
+                        })
+                      }
+                      className="w-full rounded-xl2 border border-border/60 bg-bg/40 px-2 py-2 text-sm outline-none focus:border-cs2/70"
+                    />
                   </td>
                 );
-              }
-              return (
-                <td key={iso} className="px-3 py-3">
-                  <input
-                    inputMode="decimal"
-                    value={todayEntry.kpm_cs ?? ""}
-                    onChange={(ev) => onChangeToday({ ...todayEntry, kpm_cs: parseFRFloat(ev.target.value) })}
-                    className="w-full rounded-xl2 border border-border/60 bg-bg/40 px-2 py-2 text-sm outline-none focus:border-cs2/70"
-                    placeholder="ex: 1,60"
-                  />
-                </td>
-              );
-            })}
-          </tr>
-        </tbody>
-      </table>
+              })}
+            </tr>
+          </tbody>
+        </table>
 
-      <div className="mt-4 flex items-center justify-between">
-        <div className="text-xs text-muted">
-          {isEditing
-            ? "Une entrée existe déjà aujourd’hui — tu peux la modifier."
-            : "Aucune entrée aujourd’hui — remplis la dernière colonne et enregistre."}
+        <div className="mt-4 flex items-center justify-between">
+          <div className="text-xs text-muted">
+            {isEditing
+              ? "Une entrée existe déjà aujourd’hui — tu peux la modifier."
+              : "Aucune entrée aujourd’hui — remplis la dernière colonne et enregistre."}
+          </div>
+          <button
+            onClick={onSave}
+            className="rounded-full bg-cs2 px-4 py-2 text-sm font-semibold text-bg hover:bg-cs2b"
+          >
+            {isEditing ? "Modifier" : "Enregistrer"}
+          </button>
         </div>
-        <button
-          onClick={onSave}
-          className="rounded-full bg-cs2 px-4 py-2 text-sm font-semibold text-bg hover:bg-cs2b"
-        >
-          {isEditing ? "Modifier" : "Enregistrer"}
-        </button>
-      </div>
-      <div className="mt-8">
-        <KpmChart entries={entries} daysBack={20} defaultWeapon={todayEntry.weapon} />
       </div>
 
+      {/* ========================= TAB 2 ========================= */}
+      <TrainingHistoryTable entries={entries} dayCols={tab2Cols} />
+
+      {/* ========================= GRAPH ========================= */}
+      <KpmChart entries={entries} daysBack={20} defaultWeapon={todayEntry.weapon} />
     </div>
   );
 }
 
-// Lecture seule (historique) : affiche N jours consécutifs avant le tableau principal.
-// Exemple: daysAgoFrom=20, days=10 => J-20 ... J-11
-export function TrainingHistoryTable({
+/** TAB 2 = lecture seule sur des colonnes déjà calculées */
+function TrainingHistoryTable({
   entries,
-  daysAgoFrom,
-  days,
+  dayCols,
 }: {
   entries: Entry[];
-  daysAgoFrom: number;
-  days: number;
+  dayCols: string[];
 }) {
-  const dayCols = useMemo(() => {
-    const res: string[] = [];
-    const base = new Date();
-    for (let i = daysAgoFrom; i >= daysAgoFrom - days + 1; i--) {
-      const tmp = new Date(base);
-      tmp.setDate(base.getDate() - i);
-      res.push(isoDay(tmp));
-    }
-    return res;
-  }, [daysAgoFrom, days]);
-
   const byDay = useMemo(() => {
     const map = new Map<string, Entry>();
     for (const e of entries) map.set(e.date, e);
@@ -269,7 +293,9 @@ export function TrainingHistoryTable({
           </tr>
 
           <tr className="border-t border-border/40">
-            <td className="sticky left-0 z-10 bg-card/70 px-3 py-3 text-xs text-muted">KPM immobile</td>
+            <td className="sticky left-0 z-10 bg-card/70 px-3 py-3 text-xs text-muted">
+              KPM immobile
+            </td>
             {dayCols.map((iso) => {
               const e = byDay.get(iso);
               return (
@@ -296,6 +322,7 @@ export function TrainingHistoryTable({
     </div>
   );
 }
+
 function linePath(
   values: (number | null)[],
   xAt: (i: number) => number,
@@ -331,6 +358,11 @@ export function KpmChart({
   defaultWeapon?: WeaponKey;
 }) {
   const [weapon, setWeapon] = useState<WeaponKey>(defaultWeapon);
+
+  // si aujourd’hui tu changes l’arme, on resynchronise le select du chart
+  useEffect(() => {
+    setWeapon(defaultWeapon);
+  }, [defaultWeapon]);
 
   const days = useMemo(() => {
     const res: string[] = [];
@@ -375,7 +407,6 @@ export function KpmChart({
     return { min: Math.max(0, min - pad), max: max + pad };
   }, [series]);
 
-  // SVG sizing
   const W = 1000;
   const H = 280;
   const P = { l: 52, r: 18, t: 16, b: 40 };
@@ -417,10 +448,19 @@ export function KpmChart({
 
       <div className="overflow-x-auto">
         <svg viewBox={`0 0 ${W} ${H}`} className="h-[280px] w-full min-w-[860px]">
-          {/* Grid lines (3 horizontales) */}
+          {/* Grid lines */}
           {[0, 0.5, 1].map((t) => {
             const y = P.t + plotH * t;
-            return <line key={t} x1={P.l} y1={y} x2={W - P.r} y2={y} stroke="rgba(255,255,255,0.08)" />;
+            return (
+              <line
+                key={t}
+                x1={P.l}
+                y1={y}
+                x2={W - P.r}
+                y2={y}
+                stroke="rgba(255,255,255,0.08)"
+              />
+            );
           })}
 
           {/* Y labels */}
@@ -447,7 +487,7 @@ export function KpmChart({
             ) : null
           )}
 
-          {/* X labels (1 sur 3 + start/end) */}
+          {/* X labels */}
           {days.map((d, i) => {
             const show = i === 0 || i === days.length - 1 || i % 3 === 0;
             if (!show) return null;
@@ -467,7 +507,6 @@ export function KpmChart({
         </svg>
       </div>
 
-      {/* Legend */}
       <div className="mt-3 flex items-center gap-4 text-xs text-muted">
         <div className="flex items-center gap-2">
           <span className="inline-block h-2 w-6 rounded-full bg-white/80" />
@@ -481,4 +520,3 @@ export function KpmChart({
     </div>
   );
 }
-
