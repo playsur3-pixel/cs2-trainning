@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Card, CardContent, CardHeader, CardTitle } from "../components/Card";
-import { TrainingTable, type Entry } from "../components/TrainingTable";
+import { TrainingHistoryTable, TrainingTable, type Entry } from "../components/TrainingTable";
 import { clearSession, getSession } from "../lib/auth";
 import { apiGetPlayer, apiSaveEntry } from "../lib/api";
 import { profile } from "../data/profile";
@@ -103,15 +103,14 @@ export function DashboardPage() {
             <div className="relative">
               <img
                 src={profile.avatar}
-                alt={profile.displayName}
+                alt={pseudo}
                 className="h-16 w-16 rounded-2xl border border-border/50 object-cover"
               />
               <span className="absolute -bottom-1 -right-1 h-4 w-4 rounded-full border-2 border-card bg-cs2" />
             </div>
             <div className="min-w-0">
-              <div className="truncate text-lg font-semibold">{profile.displayName}</div>
-              <div className="truncate text-sm text-muted">Monitoring joueur : {pseudo}</div>
-              <div className="mt-2 text-sm text-muted">{profile.tagline}</div>
+              <div className="truncate text-lg font-semibold">{pseudo}</div>
+              <div className="truncate text-sm text-muted">Suivi d'entraînement (KPM)</div>
             </div>
           </div>
 
@@ -157,6 +156,21 @@ export function DashboardPage() {
               onChangeToday={(next) => setTodayDraft(next)}
               onSave={onSave}
             />
+          </CardContent>
+        </Card>
+      </section>
+
+      {/* Historique plus ancien */}
+      <section className="mt-8">
+        <Card>
+          <CardHeader>
+            <CardTitle>Historique — 10 jours précédents</CardTitle>
+            <div className="text-sm text-muted">
+              Les 10 jours avant le tableau principal (lecture seule).
+            </div>
+          </CardHeader>
+          <CardContent>
+            <TrainingHistoryTable entries={entries} daysAgoFrom={20} days={10} />
           </CardContent>
         </Card>
       </section>

@@ -6,8 +6,8 @@ export type Showcase = { title: string; desc: string; img: string; tags: string[
 
 export const profile = {
   handle: "playSURE",
-  displayName: "Romain 'playSURE' LE GALL",
-  tagline: "Coach CS2 • Teamplay • Strats • VOD Review",
+  displayName: "",
+  tagline: "",
 
   cover: "/assets/cover-cs2.png",
   avatar: "/assets/Image_Profil.png",
@@ -26,7 +26,7 @@ export const profile = {
   ] as Link[],
 
   about:
-    "Coach CS2 orienté progression mesurable : VOD review, structuration des rôles, routines d’entraînement et plan d’action clair. Objectif : te faire gagner du temps, réduire les erreurs qui coûtent des rounds, et jouer plus propre en solo comme en équipe.",
+    "Remplissez vos résultats au quotidien afin de voir votre évolution",
 
   stats: [
     { label: "Format", value: "Session Discord (1h)", hint: "VOD review + plan d’action" },

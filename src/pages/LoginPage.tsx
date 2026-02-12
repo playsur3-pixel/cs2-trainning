@@ -49,69 +49,72 @@ export function LoginPage() {
     }
   }
 
-  return (
-    <main className="mx-auto max-w-6xl px-4 py-8">
-      <section className="relative overflow-hidden rounded-xl2 border border-border/50 shadow-soft">
-        {/* Background */}
-        <div
-          className="relative min-h-[72vh] bg-[url('/assets/BG_Title.png')] bg-cover bg-center"
-          aria-label="CS2 background"
-        >
-          {/* Dark overlay for readability */}
-          <div className="absolute inset-0 bg-gradient-to-b from-bg/55 via-bg/40 to-bg/70" />
+return (
+  // Le scroll venait du combo: TopNav + py-8 + min-h-[72vh].
+  // On force une hauteur "pile écran" sous la TopNav et on retire les min-h internes.
+  <main className="mx-auto flex h-[calc(100dvh-72px)] max-w-6xl px-4 py-4">
+    <section className="relative flex-1 overflow-hidden rounded-xl2 border border-border/50 shadow-soft">
+      {/* Background */}
+      <div
+        className="relative h-full bg-[url('/assets/BG_Title.png')] bg-contain bg-center bg-no-repeat"
+        aria-label="CS2 background"
+      >
+        {/* Dark overlay for readability */}
+        <div className="absolute inset-0 bg-gradient-to-b from-bg/55 via-bg/40 to-bg/70" />
 
-          {/* Login card (compact so it doesn't hide the bottom title) */}
-          <div className="relative flex min-h-[90vh] items-start justify-center px-4 pt-[210px]">
-            <div className="w-full max-w-sm">
-              <Card className="bg-card/55">
-                <CardHeader className="pb-3">
-                  <CardTitle className="text-xl">Connexion</CardTitle>
-                </CardHeader>
-                <CardContent className="pt-0">
-                  <form onSubmit={onSubmit} className="grid gap-3">
-                    <label className="grid gap-1">
-                      <span className="text-xs text-muted">Pseudo</span>
-                      <input
-                        value={pseudo}
-                        onChange={(e) => setPseudo(e.target.value)}
-                        className="rounded-xl2 border border-border/60 bg-bg/40 px-3 py-2 text-sm outline-none focus:border-cs2/70"
-                        placeholder=""
-                        autoComplete="username"
-                      />
-                    </label>
+        {/* Login card */}
+        <div className="relative flex min-h-[74vh] items-center justify-center px-4 -translate-y-6">
+          <div className="w-full max-w-sm translate-y-6">
+            <Card className="bg-card/65">
+              <CardHeader className="pb-3">
+                <CardTitle className="text-xl">Connexion</CardTitle>
+              </CardHeader>
+              <CardContent className="pt-0">
+                <form onSubmit={onSubmit} className="grid gap-3">
+                  <label className="grid gap-1">
+                    <span className="text-xs text-muted">Pseudo</span>
+                    <input
+                      value={pseudo}
+                      onChange={(e) => setPseudo(e.target.value)}
+                      className="rounded-xl2 border border-border/60 bg-bg/40 px-3 py-2 text-sm outline-none focus:border-cs2/70"
+                      placeholder=""
+                      autoComplete="username"
+                    />
+                  </label>
 
-                    <label className="grid gap-1">
-                      <span className="text-xs text-muted">Password</span>
-                      <input
-                        value={password}
-                        onChange={(e) => setPassword(e.target.value)}
-                        type="password"
-                        className="rounded-xl2 border border-border/60 bg-bg/40 px-3 py-2 text-sm outline-none focus:border-cs2/70"
-                        placeholder=""
-                        autoComplete="current-password"
-                      />
-                    </label>
+                  <label className="grid gap-1">
+                    <span className="text-xs text-muted">Password</span>
+                    <input
+                      value={password}
+                      onChange={(e) => setPassword(e.target.value)}
+                      type="password"
+                      className="rounded-xl2 border border-border/60 bg-bg/40 px-3 py-2 text-sm outline-none focus:border-cs2/70"
+                      placeholder=""
+                      autoComplete="current-password"
+                    />
+                  </label>
 
-                    {error ? (
-                      <div className="rounded-xl2 border border-red-500/30 bg-red-500/10 px-3 py-2 text-sm text-red-200">
-                        {error}
-                      </div>
-                    ) : null}
+                  {error ? (
+                    <div className="rounded-xl2 border border-red-500/30 bg-red-500/10 px-3 py-2 text-sm text-red-200">
+                      {error}
+                    </div>
+                  ) : null}
 
-                    <button
-                      disabled={!canSubmit || loading}
-                      className="mt-2 rounded-full bg-cs2 px-4 py-2 text-sm font-semibold text-bg hover:bg-cs2b disabled:cursor-not-allowed disabled:opacity-50"
-                      type="submit"
-                    >
-                      {loading ? "Connexion…" : "Se connecter"}
-                    </button>
-                  </form>
-                </CardContent>
-              </Card>
-            </div>
+                  <button
+                    disabled={!canSubmit || loading}
+                    className="mt-2 rounded-full bg-cs2 px-4 py-2 text-sm font-semibold text-bg hover:bg-cs2b disabled:cursor-not-allowed disabled:opacity-50"
+                    type="submit"
+                  >
+                    {loading ? "Connexion…" : "Se connecter"}
+                  </button>
+                </form>
+              </CardContent>
+            </Card>
           </div>
         </div>
-      </section>
-    </main>
-  );
+      </div>
+    </section>
+  </main>
+);
+
 }
