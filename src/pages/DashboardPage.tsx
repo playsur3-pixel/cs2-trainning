@@ -169,9 +169,9 @@ export function DashboardPage() {
               Les 10 jours avant le tableau principal (lecture seule).
             </div>
           </CardHeader>
-          <CardContent>
+          {/* <CardContent>
             <TrainingHistoryTable entries={entries} daysAgoFrom={20} days={10} />
-          </CardContent>
+          </CardContent> */}
         </Card>
       </section>
 

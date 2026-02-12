@@ -56,7 +56,7 @@ return (
     <section className="relative flex-1 overflow-hidden rounded-xl2 border border-border/50 shadow-soft">
       {/* Background */}
       <div
-        className="relative h-full bg-[url('/assets/BG_Title.png')] bg-contain bg-center bg-no-repeat"
+        className="relative h-full bg-[url('/assets/BG_Title.png')] bg-no-repeat bg-center [background-size:100%_100%]"
         aria-label="CS2 background"
       >
         {/* Dark overlay for readability */}
