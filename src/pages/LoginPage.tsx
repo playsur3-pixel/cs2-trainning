@@ -61,12 +61,11 @@ export function LoginPage() {
           <div className="absolute inset-0 bg-gradient-to-b from-bg/55 via-bg/40 to-bg/70" />
 
           {/* Login card (compact so it doesn't hide the bottom title) */}
-          <div className="relative flex min-h-[72vh] items-start justify-center px-4 pt-[200px]">
+          <div className="relative flex min-h-[90vh] items-start justify-center px-4 pt-[210px]">
             <div className="w-full max-w-sm">
-              <Card className="bg-card/65">
+              <Card className="bg-card/55">
                 <CardHeader className="pb-3">
                   <CardTitle className="text-xl">Connexion</CardTitle>
-                  <div className="text-sm text-muted">Pseudo + password</div>
                 </CardHeader>
                 <CardContent className="pt-0">
                   <form onSubmit={onSubmit} className="grid gap-3">
@@ -76,7 +75,7 @@ export function LoginPage() {
                         value={pseudo}
                         onChange={(e) => setPseudo(e.target.value)}
                         className="rounded-xl2 border border-border/60 bg-bg/40 px-3 py-2 text-sm outline-none focus:border-cs2/70"
-                        placeholder="ex: Romain"
+                        placeholder=""
                         autoComplete="username"
                       />
                     </label>
@@ -88,7 +87,7 @@ export function LoginPage() {
                         onChange={(e) => setPassword(e.target.value)}
                         type="password"
                         className="rounded-xl2 border border-border/60 bg-bg/40 px-3 py-2 text-sm outline-none focus:border-cs2/70"
-                        placeholder="******"
+                        placeholder=""
                         autoComplete="current-password"
                       />
                     </label>
