@@ -9,6 +9,10 @@
     "build": "vite build",
     "preview": "vite preview"
   },
+    "engines": {
+      "node": "20.x",
+      "npm": "10.x"
+  },
   "dependencies": {
     "@netlify/blobs": "^8.2.0",
     "clsx": "^2.1.1",
