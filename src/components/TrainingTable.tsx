@@ -1,7 +1,14 @@
 import { useEffect, useMemo, useState } from "react";
 import { cn } from "../lib/cn";
 
-export type WeaponKey = "glock" | "usp_s" | "m4a4" | "m4a1_s" | "ak47" | "galil";
+type WeaponKey =
+  | "glock"
+  | "ups_s"
+  | "deagle"
+  | "ak47"
+  | "m4a4"
+  | "m4a1s"
+  | "galil"
 
 export type Entry = {
   date: string; // YYYY-MM-DD
@@ -12,10 +19,11 @@ export type Entry = {
 
 export const WEAPONS: { key: WeaponKey; label: string }[] = [
   { key: "glock", label: "Glock" },
-  { key: "usp_s", label: "USP-S" },
-  { key: "m4a4", label: "M4A4" },
-  { key: "m4a1_s", label: "M4A1-S" },
+  { key: "ups_s", label: "USP-S" },
+  { key: "deagle", label: "Deagle" },
   { key: "ak47", label: "AK-47" },
+  { key: "m4a4", label: "M4A4" },
+  { key: "m4a1s", label: "M4A1-S" },
   { key: "galil", label: "Galil" },
 ];
 
