@@ -451,11 +451,11 @@ export function DashboardPage() {
                       key={key}
                       className="rounded-xl border border-border/50 bg-bg/20 p-3"
                     >
-                      <div className="mb-2 text-sm font-semibold">{label}</div><div className="mb-3 font-semibold">{label}</div>
+                      <div className="mb-3 font-semibold">{label}</div>
 
                       <div className="grid gap-3">
                         <label className="grid gap-1 text-sm">
-                          <span className="text-muted">KPM immobile</span>
+                          <span className="text-muted">KPM</span>
                           <input
                             type="number"
                             step="0.1"
@@ -485,7 +485,7 @@ export function DashboardPage() {
                         </label>
 
                         <label className="grid gap-1 text-sm">
-                          <span className="text-muted">KPM CS</span>
+                          <span className="text-muted">KPM Counter-Sraffe</span>
                           <input
                             type="number"
                             step="0.1"
