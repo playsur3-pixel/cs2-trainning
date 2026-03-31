@@ -12,7 +12,7 @@ type WeaponKey =
   | "ak47"
   | "m4a4"
   | "m4a1s"
-  | "galil"
+  | "galil";
 
 type Entry = {
   date: string;
@@ -23,13 +23,7 @@ type Entry = {
 
 type DayDraft = {
   date: string;
-  values: Record<
-    WeaponKey,
-    {
-      kpm_immobile: number | null;
-      kpm_cs: number | null;
-    }
-  >;
+  values: Record<WeaponKey, number | null>;
 };
 
 type FilterValue = "all" | WeaponKey;
@@ -48,13 +42,13 @@ function buildEmptyDraft(date: string): DayDraft {
   return {
     date,
     values: {
-      glock: { kpm_immobile: null, kpm_cs: null },
-      ups_s: { kpm_immobile: null, kpm_cs: null },
-      deagle: { kpm_immobile: null, kpm_cs: null },
-      ak47: { kpm_immobile: null, kpm_cs: null },
-      m4a4: { kpm_immobile: null, kpm_cs: null },
-      m4a1s: { kpm_immobile: null, kpm_cs: null },
-      galil: { kpm_immobile: null, kpm_cs: null },
+      glock: null,
+      ups_s: null,
+      deagle: null,
+      ak47: null,
+      m4a4: null,
+      m4a1s: null,
+      galil: null,
     },
   };
 }
@@ -65,7 +59,6 @@ function clampLast90Days(entries: Entry[]): Entry[] {
   return entries.filter((e) => keepDates.has(e.date));
 }
 
-// Dev fallback (when not running via Netlify): localStorage storage
 async function loadEntriesLocal(pseudo: string): Promise<Entry[]> {
   const key = `psm_entries_${pseudo}`;
   const raw = localStorage.getItem(key);
@@ -88,10 +81,7 @@ function entriesToDayDraft(entries: Entry[], date: string): DayDraft {
 
   for (const entry of entries) {
     if (entry.date !== date) continue;
-    draft.values[entry.weapon] = {
-      kpm_immobile: entry.kpm_immobile,
-      kpm_cs: entry.kpm_cs,
-    };
+    draft.values[entry.weapon] = entry.kpm_immobile;
   }
 
   return draft;
@@ -103,8 +93,8 @@ function upsertEntriesFromDraft(entries: Entry[], draft: DayDraft): Entry[] {
   const additions: Entry[] = WEAPONS.map(({ key }) => ({
     date: draft.date,
     weapon: key,
-    kpm_immobile: draft.values[key].kpm_immobile,
-    kpm_cs: draft.values[key].kpm_cs,
+    kpm_immobile: draft.values[key],
+    kpm_cs: null,
   }));
 
   return clampLast90Days(
@@ -114,7 +104,44 @@ function upsertEntriesFromDraft(entries: Entry[], draft: DayDraft): Entry[] {
   );
 }
 
-function getDailyGraphData(entries: Entry[], filter: FilterValue) {
+function formatGraphDate(dateStr: string) {
+  const date = new Date(`${dateStr}T00:00:00`);
+  return date.toLocaleDateString("fr-FR", {
+    day: "2-digit",
+    month: "2-digit",
+  });
+}
+
+function formatFrenchDayLabel(dateStr: string) {
+  const date = new Date(`${dateStr}T00:00:00`);
+  return date.toLocaleDateString("fr-FR", {
+    weekday: "short",
+    day: "2-digit",
+    month: "2-digit",
+  });
+}
+
+function getLast7DaysStatus(entries: Entry[], todayIso: string) {
+  const entryDates = new Set(entries.map((e) => e.date));
+  const today = new Date(`${todayIso}T00:00:00`);
+
+  return Array.from({ length: 7 }, (_, index) => {
+    const d = new Date(today);
+    d.setDate(today.getDate() - (6 - index));
+
+    const iso = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(
+      d.getDate()
+    ).padStart(2, "0")}`;
+
+    return {
+      date: iso,
+      label: formatFrenchDayLabel(iso),
+      hasEntry: entryDates.has(iso),
+    };
+  });
+}
+
+function getDailyGraphData(entries: Entry[], weaponFilter: FilterValue) {
   const byDate = new Map<string, Entry[]>();
 
   for (const entry of clampLast90Days(entries)) {
@@ -126,24 +153,17 @@ function getDailyGraphData(entries: Entry[], filter: FilterValue) {
 
   return dates.map((date) => {
     const dayEntries = byDate.get(date)!;
+    let values: number[] = [];
 
-    if (filter === "all") {
-      const values = dayEntries
-        .flatMap((entry) => [entry.kpm_immobile, entry.kpm_cs])
+    if (weaponFilter === "all") {
+      values = dayEntries
+        .map((entry) => entry.kpm_immobile)
         .filter((v): v is number => typeof v === "number");
-
-      const avg = values.length ? values.reduce((sum, v) => sum + v, 0) / values.length : 0;
-
-      return {
-        date,
-        value: Number(avg.toFixed(2)),
-      };
+    } else {
+      const weaponEntry = dayEntries.find((entry) => entry.weapon === weaponFilter);
+      values =
+        typeof weaponEntry?.kpm_immobile === "number" ? [weaponEntry.kpm_immobile] : [];
     }
-
-    const weaponEntry = dayEntries.find((entry) => entry.weapon === filter);
-    const values = [weaponEntry?.kpm_immobile, weaponEntry?.kpm_cs].filter(
-      (v): v is number => typeof v === "number"
-    );
 
     const avg = values.length ? values.reduce((sum, v) => sum + v, 0) / values.length : 0;
 
@@ -152,6 +172,78 @@ function getDailyGraphData(entries: Entry[], filter: FilterValue) {
       value: Number(avg.toFixed(2)),
     };
   });
+}
+
+function getProgressSummary(
+  entries: Entry[],
+  filter: FilterValue
+): {
+  firstValue: number | null;
+  lastValue: number | null;
+  deltaPercent: number | null;
+  recordedDays: number;
+  missingDays: number;
+} {
+  const byDate = new Map<string, Entry[]>();
+
+  for (const entry of clampLast90Days(entries)) {
+    if (!byDate.has(entry.date)) byDate.set(entry.date, []);
+    byDate.get(entry.date)!.push(entry);
+  }
+
+  const sortedDates = Array.from(byDate.keys()).sort((a, b) => a.localeCompare(b));
+
+  const relevantDays = sortedDates
+    .map((date) => {
+      const dayEntries = byDate.get(date)!;
+      let values: number[] = [];
+
+      if (filter === "all") {
+        values = dayEntries
+          .map((entry) => entry.kpm_immobile)
+          .filter((v): v is number => typeof v === "number");
+      } else {
+        const weaponEntry = dayEntries.find((entry) => entry.weapon === filter);
+        if (typeof weaponEntry?.kpm_immobile === "number") {
+          values = [weaponEntry.kpm_immobile];
+        }
+      }
+
+      return values.length
+        ? {
+            date,
+            value: Number((values.reduce((sum, v) => sum + v, 0) / values.length).toFixed(2)),
+          }
+        : null;
+    })
+    .filter((day): day is { date: string; value: number } => day !== null);
+
+  const recordedDays = relevantDays.length;
+  const missingDays = Math.max(90 - recordedDays, 0);
+
+  if (relevantDays.length < 2) {
+    return {
+      firstValue: relevantDays[0]?.value ?? null,
+      lastValue: relevantDays[0]?.value ?? null,
+      deltaPercent: null,
+      recordedDays,
+      missingDays,
+    };
+  }
+
+  const firstValue = relevantDays[0].value;
+  const lastValue = relevantDays[relevantDays.length - 1].value;
+
+  const deltaPercent =
+    firstValue > 0 ? Number((((lastValue - firstValue) / firstValue) * 100).toFixed(1)) : null;
+
+  return {
+    firstValue,
+    lastValue,
+    deltaPercent,
+    recordedDays,
+    missingDays,
+  };
 }
 
 function MiniLineChart({
@@ -221,11 +313,7 @@ function MiniLineChart({
               className="stroke-border/40"
               strokeWidth="1"
             />
-            <text
-              x={8}
-              y={line.y + 4}
-              className="fill-muted text-[11px]"
-            >
+            <text x={8} y={line.y + 4} className="fill-muted text-[11px]">
               {line.value.toFixed(1)}
             </text>
           </g>
@@ -236,7 +324,7 @@ function MiniLineChart({
         {points.map((p) => (
           <g key={`${p.date}-${p.x}`}>
             <circle cx={p.x} cy={p.y} r="4" className="fill-cs2" />
-            <title>{`${p.date} — ${p.value}`}</title>
+            <title>{`${formatGraphDate(p.date)} — ${p.value}`}</title>
           </g>
         ))}
 
@@ -248,41 +336,14 @@ function MiniLineChart({
             textAnchor="middle"
             className="fill-muted text-[11px]"
           >
-            {p.date.slice(5)}
+            {formatGraphDate(p.date)}
           </text>
         ))}
       </svg>
     </div>
   );
 }
-function formatFrenchDayLabel(dateStr: string) {
-  const date = new Date(`${dateStr}T00:00:00`);
-  return date.toLocaleDateString("fr-FR", {
-    weekday: "short",
-    day: "2-digit",
-    month: "2-digit",
-  });
-}
 
-function getLast7DaysStatus(entries: Entry[], todayIso: string) {
-  const entryDates = new Set(entries.map((e) => e.date));
-  const today = new Date(`${todayIso}T00:00:00`);
-
-  return Array.from({ length: 7 }, (_, index) => {
-    const d = new Date(today);
-    d.setDate(today.getDate() - (6 - index));
-
-    const iso = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(
-      d.getDate()
-    ).padStart(2, "0")}`;
-
-    return {
-      date: iso,
-      label: formatFrenchDayLabel(iso),
-      hasEntry: entryDates.has(iso),
-    };
-  });
-}
 export function DashboardPage() {
   const nav = useNavigate();
   const session = useMemo(() => getSession(), []);
@@ -294,8 +355,6 @@ export function DashboardPage() {
   const [filter, setFilter] = useState<FilterValue>("all");
   const [isSaving, setIsSaving] = useState(false);
 
-  
-
   const todayIso = useMemo(() => {
     const now = new Date();
     return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(
@@ -304,9 +363,9 @@ export function DashboardPage() {
   }, []);
 
   const last7DaysStatus = useMemo(
-  () => getLast7DaysStatus(entries, todayIso),
-  [entries, todayIso]
-);
+    () => getLast7DaysStatus(entries, todayIso),
+    [entries, todayIso]
+  );
 
   useEffect(() => {
     if (!session) {
@@ -336,13 +395,12 @@ export function DashboardPage() {
     setStatus(null);
 
     try {
-      // On sauvegarde une entrée par arme pour rester compatible avec l'API actuelle
       for (const { key } of WEAPONS) {
         const payload: Entry = {
           date: todayDraft.date,
           weapon: key,
-          kpm_immobile: todayDraft.values[key].kpm_immobile,
-          kpm_cs: todayDraft.values[key].kpm_cs,
+          kpm_immobile: todayDraft.values[key],
+          kpm_cs: null,
         };
         await apiSaveEntry(session, payload);
       }
@@ -353,7 +411,6 @@ export function DashboardPage() {
       setTodayDraft(entriesToDayDraft(next, todayIso));
       setStatus("Enregistré ✅");
     } catch {
-      // Dev fallback local
       const next = upsertEntriesFromDraft(entries, todayDraft);
       await saveEntriesLocal(session.pseudo, next);
       setEntries(next);
@@ -372,6 +429,11 @@ export function DashboardPage() {
 
   const graphData = useMemo(() => getDailyGraphData(entries, filter), [entries, filter]);
 
+  const progressSummary = useMemo(
+    () => getProgressSummary(entries, filter),
+    [entries, filter]
+  );
+
   return (
     <main className="mx-auto max-w-6xl px-4 py-8">
       <Card className="p-6">
@@ -385,11 +447,10 @@ export function DashboardPage() {
               />
               <span className="absolute -bottom-1 -right-1 h-4 w-4 rounded-full border-2 border-card bg-cs2" />
             </div>
+
             <div className="min-w-0">
               <div className="truncate text-lg font-semibold">{pseudo}</div>
-              <div className="truncate text-sm text-muted">
-                Suivi d'entraînement CS2 — 90 jours
-              </div>
+              <div className="truncate text-sm text-muted">Suivi d'entraînement CS2 — 90 jours</div>
             </div>
           </div>
 
@@ -404,27 +465,28 @@ export function DashboardPage() {
         </div>
 
         <p className="mt-4 text-sm text-muted">{profile.about}</p>
-        <div className="mt-4">
-  <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted">
-    7 derniers jours
-  </div>
 
-  <div className="flex flex-wrap gap-2">
-    {last7DaysStatus.map((day) => (
-      <div
-        key={day.date}
-        className={`rounded-full border px-3 py-1 text-xs font-medium ${
-          day.hasEntry
-            ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-300"
-            : "border-border/50 bg-card/30 text-muted"
-        }`}
-        title={`${day.date} — ${day.hasEntry ? "enregistré" : "aucun enregistrement"}`}
-      >
-        {day.label} · {day.hasEntry ? "OK" : "—"}
-      </div>
-    ))}
-  </div>
-</div>
+        <div className="mt-4">
+          <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted">
+            7 derniers jours
+          </div>
+
+          <div className="flex flex-wrap gap-2">
+            {last7DaysStatus.map((day) => (
+              <div
+                key={day.date}
+                className={`rounded-full border px-3 py-1 text-xs font-medium ${
+                  day.hasEntry
+                    ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-300"
+                    : "border-border/50 bg-card/30 text-muted"
+                }`}
+                title={`${day.date} — ${day.hasEntry ? "enregistré" : "aucun enregistrement"}`}
+              >
+                {day.label} · {day.hasEntry ? "OK" : "—"}
+              </div>
+            ))}
+          </div>
+        </div>
       </Card>
 
       <section className="mt-8">
@@ -432,7 +494,7 @@ export function DashboardPage() {
           <CardHeader>
             <CardTitle>Saisie du jour — {todayIso}</CardTitle>
             <div className="text-sm text-muted">
-              Renseigne toutes les armes pour aujourd’hui, puis enregistre la journée.
+              Renseigne le KPM du jour pour chaque arme, puis enregistre la journée.
             </div>
           </CardHeader>
 
@@ -447,73 +509,32 @@ export function DashboardPage() {
               <>
                 <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
                   {WEAPONS.map(({ key, label }) => (
-                    <div
-                      key={key}
-                      className="rounded-xl border border-border/50 bg-bg/20 p-3"
-                    >
-                      <div className="mb-3 font-semibold">{label}</div>
+                    <div key={key} className="rounded-xl border border-border/50 bg-bg/20 p-3">
+                      <div className="mb-2 text-sm font-semibold">{label}</div>
 
-                      <div className="grid gap-3">
-                        <label className="grid gap-1 text-sm">
-                          <span className="text-muted">KPM</span>
-                          <input
-                            type="number"
-                            step="0.1"
-                            min="0"
-                            value={todayDraft.values[key].kpm_immobile ?? ""}
-                            onChange={(e) =>
-                              setTodayDraft((prev) =>
-                                prev
-                                  ? {
-                                      ...prev,
-                                      values: {
-                                        ...prev.values,
-                                        [key]: {
-                                          ...prev.values[key],
-                                          kpm_immobile:
-                                            e.target.value === ""
-                                              ? null
-                                              : Number(e.target.value),
-                                        },
-                                      },
-                                    }
-                                  : prev
-                              )
-                            }
-                            className="rounded-lg border border-border/60 bg-card/50 px-2.5 py-1.5 text-sm outline-none focus:border-cs2/60"
-                          />
-                        </label>
-
-                        <label className="grid gap-1 text-sm">
-                          <span className="text-muted">KPM Counter-Sraffe</span>
-                          <input
-                            type="number"
-                            step="0.1"
-                            min="0"
-                            value={todayDraft.values[key].kpm_cs ?? ""}
-                            onChange={(e) =>
-                              setTodayDraft((prev) =>
-                                prev
-                                  ? {
-                                      ...prev,
-                                      values: {
-                                        ...prev.values,
-                                        [key]: {
-                                          ...prev.values[key],
-                                          kpm_cs:
-                                            e.target.value === ""
-                                              ? null
-                                              : Number(e.target.value),
-                                        },
-                                      },
-                                    }
-                                  : prev
-                              )
-                            }
-                            className="rounded-xl border border-border/60 bg-card/50 px-3 py-2 outline-none focus:border-cs2/60"
-                          />
-                        </label>
-                      </div>
+                      <label className="grid gap-1 text-sm">
+                        <span className="text-muted">KPM</span>
+                        <input
+                          type="number"
+                          step="0.1"
+                          min="0"
+                          value={todayDraft.values[key] ?? ""}
+                          onChange={(e) =>
+                            setTodayDraft((prev) =>
+                              prev
+                                ? {
+                                    ...prev,
+                                    values: {
+                                      ...prev.values,
+                                      [key]: e.target.value === "" ? null : Number(e.target.value),
+                                    },
+                                  }
+                                : prev
+                            )
+                          }
+                          className="rounded-lg border border-border/60 bg-card/50 px-2.5 py-1.5 text-sm outline-none focus:border-cs2/60"
+                        />
+                      </label>
                     </div>
                   ))}
                 </div>
@@ -527,9 +548,7 @@ export function DashboardPage() {
                     {isSaving ? "Enregistrement..." : "Enregistrer la journée"}
                   </button>
 
-                  <div className="text-sm text-muted">
-                    Historique conservé : 90 jours glissants
-                  </div>
+                  <div className="text-sm text-muted">Historique conservé : 90 jours glissants</div>
                 </div>
               </>
             ) : null}
@@ -574,12 +593,63 @@ export function DashboardPage() {
               ))}
             </div>
 
-            <MiniLineChart data={graphData} />
+            <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_240px]">
+              <div>
+                <MiniLineChart data={graphData} />
 
-            <div className="mt-4 text-xs text-muted">
-              {filter === "all"
-                ? "Vue Tous : moyenne des valeurs renseignées sur la journée."
-                : `Vue ${WEAPONS.find((w) => w.key === filter)?.label ?? ""} : moyenne KPM immobile / KPM CS du jour.`}
+                <div className="mt-4 text-xs text-muted">
+                  {filter === "all"
+                    ? "Vue Tous : moyenne des KPM renseignés sur la journée."
+                    : `Vue ${WEAPONS.find((w) => w.key === filter)?.label ?? ""} : KPM du jour.`}
+                </div>
+              </div>
+
+              <aside className="rounded-2xl border border-border/50 bg-bg/20 p-4">
+                <div className="text-sm font-semibold">Résumé 90 jours</div>
+
+                <div className="mt-4 space-y-3 text-sm">
+                  <div className="rounded-xl border border-border/40 bg-card/30 p-3">
+                    <div className="text-xs uppercase tracking-wide text-muted">Progression</div>
+                    <div
+                      className={`mt-1 text-lg font-semibold ${
+                        progressSummary.deltaPercent === null
+                          ? "text-muted"
+                          : progressSummary.deltaPercent >= 0
+                          ? "text-emerald-300"
+                          : "text-red-300"
+                      }`}
+                    >
+                      {progressSummary.deltaPercent === null
+                        ? "N/A"
+                        : `${progressSummary.deltaPercent > 0 ? "+" : ""}${progressSummary.deltaPercent}%`}
+                    </div>
+                  </div>
+
+                  <div className="rounded-xl border border-border/40 bg-card/30 p-3">
+                    <div className="text-xs uppercase tracking-wide text-muted">Premier relevé</div>
+                    <div className="mt-1 text-sm font-medium">
+                      {progressSummary.firstValue === null ? "N/A" : progressSummary.firstValue}
+                    </div>
+                  </div>
+
+                  <div className="rounded-xl border border-border/40 bg-card/30 p-3">
+                    <div className="text-xs uppercase tracking-wide text-muted">Dernier relevé</div>
+                    <div className="mt-1 text-sm font-medium">
+                      {progressSummary.lastValue === null ? "N/A" : progressSummary.lastValue}
+                    </div>
+                  </div>
+
+                  <div className="rounded-xl border border-border/40 bg-card/30 p-3">
+                    <div className="text-xs uppercase tracking-wide text-muted">Jours enregistrés</div>
+                    <div className="mt-1 text-sm font-medium">{progressSummary.recordedDays}</div>
+                  </div>
+
+                  <div className="rounded-xl border border-border/40 bg-card/30 p-3">
+                    <div className="text-xs uppercase tracking-wide text-muted">Jours manquants</div>
+                    <div className="mt-1 text-sm font-medium">{progressSummary.missingDays}</div>
+                  </div>
+                </div>
+              </aside>
             </div>
           </CardContent>
         </Card>
