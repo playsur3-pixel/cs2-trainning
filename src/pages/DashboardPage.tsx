@@ -312,41 +312,53 @@ export function DashboardPage() {
     })();
   }, [session, nav, todayIso]);
 
-  async function onSave() {
-    if (!session || !todayDraft) return;
+async function onSave() {
+  if (!session || !todayDraft) return;
 
-    setIsSaving(true);
-    setStatus(null);
+  setIsSaving(true);
+  setStatus(null);
 
-    try {
-      for (const { key } of WEAPONS) {
-        const value = todayDraft.values[key];
-        if (value === null || value === undefined) continue;
+  try {
+    for (const { key } of WEAPONS) {
+      const value = todayDraft.values[key];
+      if (value === null || value === undefined) continue;
 
-        await apiSaveEntry(session, {
-          date: todayDraft.date,
-          weapon: key,
-          kpm: value,
-        });
-      }
-
-      const r = await apiGetPlayer(session);
-      const next = Array.isArray(r.entries) ? clampLast90Days(r.entries as Entry[]) : [];
-      setEntries(next);
-      setTodayDraft(entriesToDayDraft(next, todayIso));
-      setStatus("Enregistré ✅");
-    } catch (error) {
-      console.error("apiSaveEntry failed:", error);
-      const next = upsertEntriesFromDraft(entries, todayDraft);
-      await saveEntriesLocal(session.pseudo, next);
-      setEntries(next);
-      setTodayDraft(entriesToDayDraft(next, todayIso));
-      setStatus("Enregistré en local ✅");
-    } finally {
-      setIsSaving(false);
-      window.setTimeout(() => setStatus(null), 2000);
+      await apiSaveEntry(session, {
+        date: todayDraft.date,
+        weapon: key,
+        kpm: value,
+      });
     }
+
+    // mise à jour locale immédiate pour que l'UI garde la valeur sans refresh
+    const optimisticNext = upsertEntriesFromDraft(entries, todayDraft);
+    setEntries(optimisticNext);
+    setTodayDraft(entriesToDayDraft(optimisticNext, todayIso));
+
+    // relecture backend en arrière-plan
+    try {
+      const r = await apiGetPlayer(session);
+      const fresh = Array.isArray(r.entries) ? clampLast90Days(r.entries as Entry[]) : [];
+      setEntries(fresh);
+      setTodayDraft(entriesToDayDraft(fresh, todayIso));
+    } catch {
+      // on garde l'état optimiste si la relecture échoue
+    }
+
+    setStatus("Enregistré ✅");
+  } catch (error) {
+    console.error("apiSaveEntry failed:", error);
+
+    const next = upsertEntriesFromDraft(entries, todayDraft);
+    await saveEntriesLocal(session.pseudo, next);
+    setEntries(next);
+    setTodayDraft(entriesToDayDraft(next, todayIso));
+    setStatus("Enregistré en local ✅");
+  } finally {
+    setIsSaving(false);
+    window.setTimeout(() => setStatus(null), 2000);
   }
+}
 
   function logout() {
     clearSession();
