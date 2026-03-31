@@ -66,7 +66,8 @@ async function loadEntriesLocal(pseudo: string): Promise<Entry[]> {
   try {
     const parsed = JSON.parse(raw) as Entry[];
     return clampLast90Days(Array.isArray(parsed) ? parsed : []);
-  } catch {
+  } catch (error) {
+  console.error("apiSaveEntry failed:", error);
     return [];
   }
 }
