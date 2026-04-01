@@ -1,5 +1,8 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
+import ExcelJS from "exceljs";
+import jsPDF from "jspdf";
+import autoTable from "jspdf-autotable";
 import { Card, CardContent, CardHeader, CardTitle } from "../components/Card";
 import { clearSession, getSession } from "../lib/auth";
 import { apiGetPlayer, apiSaveEntry, type Entry, type WeaponKey } from "../lib/api";
@@ -11,6 +14,13 @@ type DayDraft = {
 };
 
 type FilterValue = "all" | WeaponKey;
+
+type ExportRow = {
+  date: string;
+  weapon: WeaponKey;
+  weaponLabel: string;
+  kpm: number | null;
+};
 
 const WEAPONS: { key: WeaponKey; label: string }[] = [
   { key: "glock", label: "Glock" },
@@ -226,12 +236,85 @@ function getProgressSummary(
   };
 }
 
+function getWeaponLabel(weapon: WeaponKey) {
+  return WEAPONS.find((item) => item.key === weapon)?.label ?? weapon;
+}
+
+function getExportRows(entries: Entry[]): ExportRow[] {
+  return clampLast90Days(entries)
+    .slice()
+    .sort((a, b) =>
+      a.date === b.date ? a.weapon.localeCompare(b.weapon) : b.date.localeCompare(a.date)
+    )
+    .map((entry) => ({
+      date: entry.date,
+      weapon: entry.weapon,
+      weaponLabel: getWeaponLabel(entry.weapon),
+      kpm: typeof entry.kpm === "number" ? Number(entry.kpm.toFixed(2)) : null,
+    }));
+}
+
+function downloadBlob(blob: Blob, filename: string) {
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement("a");
+  anchor.href = url;
+  anchor.download = filename;
+  document.body.appendChild(anchor);
+  anchor.click();
+  anchor.remove();
+  URL.revokeObjectURL(url);
+}
+
+async function svgElementToPngDataUrl(svgElement: SVGSVGElement): Promise<string> {
+  const clonedSvg = svgElement.cloneNode(true) as SVGSVGElement;
+  clonedSvg.setAttribute("xmlns", "http://www.w3.org/2000/svg");
+
+  const viewBox = svgElement.viewBox.baseVal;
+  const width = Math.max(Math.round(viewBox?.width || svgElement.clientWidth || 1000), 1);
+  const height = Math.max(Math.round(viewBox?.height || svgElement.clientHeight || 420), 1);
+
+  clonedSvg.setAttribute("width", String(width));
+  clonedSvg.setAttribute("height", String(height));
+
+  const serialized = new XMLSerializer().serializeToString(clonedSvg);
+  const svgBlob = new Blob([serialized], { type: "image/svg+xml;charset=utf-8" });
+  const svgUrl = URL.createObjectURL(svgBlob);
+
+  try {
+    const img = await new Promise<HTMLImageElement>((resolve, reject) => {
+      const nextImg = new Image();
+      nextImg.onload = () => resolve(nextImg);
+      nextImg.onerror = () => reject(new Error("Impossible de convertir le graphique."));
+      nextImg.src = svgUrl;
+    });
+
+    const canvas = document.createElement("canvas");
+    canvas.width = width;
+    canvas.height = height;
+    const ctx = canvas.getContext("2d");
+
+    if (!ctx) {
+      throw new Error("Canvas indisponible pour l'export.");
+    }
+
+    ctx.fillStyle = "#0b1020";
+    ctx.fillRect(0, 0, width, height);
+    ctx.drawImage(img, 0, 0, width, height);
+
+    return canvas.toDataURL("image/png");
+  } finally {
+    URL.revokeObjectURL(svgUrl);
+  }
+}
+
 function MiniLineChart({
   data,
   height = 420,
+  svgRef,
 }: {
   data: { date: string; value: number }[];
   height?: number;
+  svgRef?: React.RefObject<SVGSVGElement>;
 }) {
   const width = 1000;
   const padding = 28;
@@ -277,6 +360,7 @@ function MiniLineChart({
   return (
     <div className="overflow-x-auto">
       <svg
+        ref={svgRef}
         viewBox={`0 0 ${width} ${height}`}
         className="h-[420px] w-full min-w-[700px] rounded-2xl border border-border/50 bg-bg/20"
         role="img"
@@ -327,12 +411,14 @@ export function DashboardPage() {
   const nav = useNavigate();
   const session = useMemo(() => getSession(), []);
   const pseudo = session?.pseudo ?? "";
+  const graphSvgRef = useRef<SVGSVGElement>(null);
 
   const [entries, setEntries] = useState<Entry[]>([]);
   const [todayDraft, setTodayDraft] = useState<DayDraft | null>(null);
   const [status, setStatus] = useState<string | null>(null);
   const [filter, setFilter] = useState<FilterValue>("all");
   const [isSaving, setIsSaving] = useState(false);
+  const [isExporting, setIsExporting] = useState<null | "json" | "xlsx" | "pdf">(null);
 
   const todayIso = useMemo(() => {
     const now = new Date();
@@ -424,6 +510,196 @@ export function DashboardPage() {
     () => getProgressSummary(entries, filter),
     [entries, filter]
   );
+
+  const exportRows = useMemo(() => getExportRows(entries), [entries]);
+
+  async function handleExportJson() {
+    setIsExporting("json");
+    try {
+      const payload = {
+        pseudo,
+        exportedAt: new Date().toISOString(),
+        filter,
+        entries: exportRows,
+      };
+
+      const blob = new Blob([JSON.stringify(payload, null, 2)], {
+        type: "application/json;charset=utf-8",
+      });
+
+      downloadBlob(blob, `playsure-kpm-${pseudo || "player"}-${todayIso}.json`);
+      setStatus("Export JSON téléchargé ✅");
+    } catch (error) {
+      console.error(error);
+      setStatus("Export JSON impossible ❌");
+    } finally {
+      setIsExporting(null);
+      window.setTimeout(() => setStatus(null), 2500);
+    }
+  }
+
+  async function handleExportXlsx() {
+    setIsExporting("xlsx");
+    try {
+      const workbook = new ExcelJS.Workbook();
+      workbook.creator = "ChatGPT";
+      workbook.created = new Date();
+      workbook.modified = new Date();
+
+      const summarySheet = workbook.addWorksheet("Progression", {
+        views: [{ showGridLines: false }],
+      });
+
+      summarySheet.columns = [
+        { width: 18 },
+        { width: 18 },
+        { width: 18 },
+        { width: 18 },
+        { width: 18 },
+        { width: 18 },
+      ];
+
+      summarySheet.mergeCells("A1:F1");
+      summarySheet.getCell("A1").value = `playSURE KPM — ${pseudo || "Joueur"}`;
+      summarySheet.getCell("A1").font = { bold: true, size: 16 };
+
+      summarySheet.mergeCells("A2:F2");
+      summarySheet.getCell("A2").value = `Vue exportée : ${
+        filter === "all" ? "Tous" : getWeaponLabel(filter)
+      } · 90 jours glissants`;
+      summarySheet.getCell("A2").font = { italic: true, size: 11 };
+
+      summarySheet.getCell("A4").value = "Progression";
+      summarySheet.getCell("B4").value =
+        progressSummary.deltaPercent === null
+          ? "N/A"
+          : `${progressSummary.deltaPercent > 0 ? "+" : ""}${progressSummary.deltaPercent}%`;
+      summarySheet.getCell("C4").value = "Premier relevé";
+      summarySheet.getCell("D4").value = progressSummary.firstValue ?? "N/A";
+      summarySheet.getCell("E4").value = "Dernier relevé";
+      summarySheet.getCell("F4").value = progressSummary.lastValue ?? "N/A";
+      summarySheet.getRow(4).font = { bold: true };
+
+      summarySheet.getCell("A5").value = "Jours enregistrés";
+      summarySheet.getCell("B5").value = progressSummary.recordedDays;
+      summarySheet.getCell("C5").value = "Jours manquants";
+      summarySheet.getCell("D5").value = progressSummary.missingDays;
+      summarySheet.getCell("E5").value = "Exporté le";
+      summarySheet.getCell("F5").value = new Date().toLocaleString("fr-FR");
+
+      const svgElement = graphSvgRef.current;
+      if (svgElement && graphData.length) {
+        const graphImage = await svgElementToPngDataUrl(svgElement);
+        const imageId = workbook.addImage({
+          base64: graphImage,
+          extension: "png",
+        });
+
+        summarySheet.addImage(imageId, {
+          tl: { col: 0, row: 6 },
+          ext: { width: 920, height: 380 },
+        });
+      }
+
+      const dataSheet = workbook.addWorksheet("Saisies 90 jours");
+      dataSheet.columns = [
+        { header: "Date", key: "date", width: 16 },
+        { header: "Arme", key: "weaponLabel", width: 16 },
+        { header: "KPM", key: "kpm", width: 12 },
+      ];
+
+      dataSheet.getRow(1).font = { bold: true };
+      dataSheet.views = [{ state: "frozen", ySplit: 1 }];
+
+      for (const row of exportRows) {
+        dataSheet.addRow({
+          date: row.date,
+          weaponLabel: row.weaponLabel,
+          kpm: row.kpm,
+        });
+      }
+
+      dataSheet.getColumn("kpm").numFmt = "0.00";
+
+      const buffer = await workbook.xlsx.writeBuffer();
+      downloadBlob(
+        new Blob([buffer], {
+          type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        }),
+        `playsure-kpm-${pseudo || "player"}-${todayIso}.xlsx`
+      );
+
+      setStatus("Export XLSX téléchargé ✅");
+    } catch (error) {
+      console.error(error);
+      setStatus("Export XLSX impossible ❌");
+    } finally {
+      setIsExporting(null);
+      window.setTimeout(() => setStatus(null), 2500);
+    }
+  }
+
+  async function handleExportPdf() {
+    setIsExporting("pdf");
+    try {
+      const pdf = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" });
+      const margin = 12;
+      const pageWidth = pdf.internal.pageSize.getWidth();
+      const contentWidth = pageWidth - margin * 2;
+
+      pdf.setFontSize(16);
+      pdf.text(`playSURE KPM — ${pseudo || "Joueur"}`, margin, 16);
+      pdf.setFontSize(10);
+      pdf.text(
+        `Vue : ${filter === "all" ? "Tous" : getWeaponLabel(filter)} · Export : ${new Date().toLocaleString(
+          "fr-FR"
+        )}`,
+        margin,
+        22
+      );
+
+      pdf.setFontSize(9);
+      pdf.text(
+        `Progression : ${
+          progressSummary.deltaPercent === null
+            ? "N/A"
+            : `${progressSummary.deltaPercent > 0 ? "+" : ""}${progressSummary.deltaPercent}%`
+        } | Premier : ${progressSummary.firstValue ?? "N/A"} | Dernier : ${
+          progressSummary.lastValue ?? "N/A"
+        } | Jours enregistrés : ${progressSummary.recordedDays}`,
+        margin,
+        28
+      );
+
+      const svgElement = graphSvgRef.current;
+      let startY = 34;
+
+      if (svgElement && graphData.length) {
+        const graphImage = await svgElementToPngDataUrl(svgElement);
+        pdf.addImage(graphImage, "PNG", margin, startY, contentWidth, 78);
+        startY += 86;
+      }
+
+      autoTable(pdf, {
+        startY,
+        head: [["Date", "Arme", "KPM"]],
+        body: exportRows.map((row) => [row.date, row.weaponLabel, row.kpm === null ? "—" : row.kpm.toFixed(2)]),
+        margin: { left: margin, right: margin },
+        styles: { fontSize: 9, cellPadding: 2 },
+        headStyles: { fillColor: [42, 45, 62] },
+        theme: "grid",
+      });
+
+      pdf.save(`playsure-kpm-${pseudo || "player"}-${todayIso}.pdf`);
+      setStatus("Export PDF téléchargé ✅");
+    } catch (error) {
+      console.error(error);
+      setStatus("Export PDF impossible ❌");
+    } finally {
+      setIsExporting(null);
+      window.setTimeout(() => setStatus(null), 2500);
+    }
+  }
 
   return (
     <main className="mx-auto max-w-6xl px-4 py-8">
@@ -550,9 +826,48 @@ export function DashboardPage() {
       <section className="mt-8">
         <Card>
           <CardHeader>
+            <CardTitle>Exports</CardTitle>
+            <div className="text-sm text-muted">
+              JSON brut, XLSX avec graphique + tableau, ou PDF avec graphique puis tableau complet des 90 jours.
+            </div>
+          </CardHeader>
+
+          <CardContent>
+            <div className="flex flex-wrap gap-3">
+              <button
+                onClick={handleExportJson}
+                disabled={isExporting !== null || exportRows.length === 0}
+                className="rounded-full border border-border/60 bg-card/40 px-4 py-2 text-sm font-semibold hover:border-cs2/60 disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                {isExporting === "json" ? "Export JSON..." : "Export .json"}
+              </button>
+
+              <button
+                onClick={handleExportXlsx}
+                disabled={isExporting !== null || exportRows.length === 0}
+                className="rounded-full border border-border/60 bg-card/40 px-4 py-2 text-sm font-semibold hover:border-cs2/60 disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                {isExporting === "xlsx" ? "Export XLSX..." : "Export .xlsx"}
+              </button>
+
+              <button
+                onClick={handleExportPdf}
+                disabled={isExporting !== null || exportRows.length === 0}
+                className="rounded-full border border-border/60 bg-card/40 px-4 py-2 text-sm font-semibold hover:border-cs2/60 disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                {isExporting === "pdf" ? "Export PDF..." : "Export .pdf"}
+              </button>
+            </div>
+          </CardContent>
+        </Card>
+      </section>
+
+      <section className="mt-8">
+        <Card>
+          <CardHeader>
             <CardTitle>Progression</CardTitle>
             <div className="text-sm text-muted">
-              Filtre par arme ou vue globale. Aucun tableau brut affiché.
+              Filtre par arme ou vue globale. Les exports reprennent ce graphique en tête.
             </div>
           </CardHeader>
 
@@ -586,7 +901,7 @@ export function DashboardPage() {
 
             <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_240px]">
               <div>
-                <MiniLineChart data={graphData} />
+                <MiniLineChart data={graphData} svgRef={graphSvgRef} />
 
                 <div className="mt-4 text-xs text-muted">
                   {filter === "all"

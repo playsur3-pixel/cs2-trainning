@@ -153,3 +153,6 @@ vite.config.ts.timestamp-*
 
 # Local Netlify folder
 .netlify
+
+#.zip 
+.zip
