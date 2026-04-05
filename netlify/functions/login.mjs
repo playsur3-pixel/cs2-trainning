@@ -3,6 +3,24 @@ import { json, normalizePseudo, randomToken, readWhitelist, sha256 } from "./_ut
 
 const SESSION_HOURS = 24;
 
+async function readCurrentAuth(store, pseudoNormalized) {
+  return await store.get(`auth:${pseudoNormalized}`, { type: "json" });
+}
+
+async function readLegacyAuth(store, pseudoInput, pseudoNormalized) {
+  const candidates = [String(pseudoInput || "").trim(), pseudoNormalized].filter(Boolean);
+  const uniqueCandidates = [...new Set(candidates)];
+
+  for (const candidate of uniqueCandidates) {
+    const auth = await store.get(`auth:${candidate}`, { type: "json" });
+    if (auth?.password_hash) {
+      return auth;
+    }
+  }
+
+  return null;
+}
+
 export async function handler(event, context) {
   connectLambda(event);
 
@@ -29,8 +47,13 @@ export async function handler(event, context) {
   }
 
   const store = getStore("psm");
+  const legacyStore = getStore("auth-player");
 
-  const auth = await store.get(`auth:${pseudoNormalized}`, { type: "json" });
+  let auth = await readCurrentAuth(store, pseudoNormalized);
+  if (!auth?.password_hash) {
+    auth = await readLegacyAuth(legacyStore, pseudoInput, pseudoNormalized);
+  }
+
   if (!auth?.password_hash) {
     return json(403, {
       error: "Password not initialized for this pseudo. Use admin_init_player first.",
@@ -44,6 +67,13 @@ export async function handler(event, context) {
   const token = randomToken();
   const expires_at = new Date(Date.now() + SESSION_HOURS * 60 * 60 * 1000).toISOString();
   const pseudo = String(auth?.pseudo || pseudoInput).trim() || pseudoInput;
+
+  // Migrate legacy auth records into the current store after a successful login.
+  await store.setJSON(`auth:${pseudoNormalized}`, {
+    pseudo,
+    password_hash: auth.password_hash,
+    updated_at: String(auth.updated_at || new Date().toISOString()),
+  });
 
   await store.set(
     `session:${token}`,
