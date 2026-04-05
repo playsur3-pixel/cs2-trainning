@@ -1,5 +1,5 @@
 import { getStore, connectLambda } from "@netlify/blobs";
-import { bearerToken, json } from "./_util.mjs";
+import { bearerToken, json, normalizePseudo } from "./_util.mjs";
 
 const MAX_DAYS = 90;
 
@@ -58,6 +58,13 @@ export async function handler(event, context) {
     return withCors(json(401, { error: "Session expired" }));
   }
 
+  const pseudoKey = String(session?.pseudo_key || normalizePseudo(session.pseudo)).trim();
+  const legacyPseudoKey = String(session.pseudo || "").trim();
+
+  if (!pseudoKey) {
+    return withCors(json(401, { error: "Invalid session" }));
+  }
+
   let body;
   try {
     body = JSON.parse(event.body || "{}");
@@ -83,11 +90,15 @@ export async function handler(event, context) {
     return withCors(json(400, { error: "Invalid kpm" }));
   }
 
-  const data =
-    (await store.get(`data:${session.pseudo}`, { type: "json" })) || {
-      pseudo: session.pseudo,
-      entries: [],
-    };
+  let data = await store.get(`data:${pseudoKey}`, { type: "json" });
+  if (!data && legacyPseudoKey && legacyPseudoKey !== pseudoKey) {
+    data = await store.get(`data:${legacyPseudoKey}`, { type: "json" });
+  }
+
+  data ||= {
+    pseudo: session.pseudo,
+    entries: [],
+  };
 
   const entries = Array.isArray(data.entries) ? data.entries : [];
 
@@ -113,7 +124,7 @@ export async function handler(event, context) {
     entries: purged,
   };
 
-  await store.set(`data:${session.pseudo}`, JSON.stringify(out), {
+  await store.set(`data:${pseudoKey}`, JSON.stringify(out), {
     contentType: "application/json",
   });
 

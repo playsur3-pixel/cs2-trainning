@@ -1,5 +1,5 @@
 import { getStore, connectLambda } from "@netlify/blobs";
-import { bearerToken, json } from "./_util.mjs";
+import { bearerToken, json, normalizePseudo } from "./_util.mjs";
 
 // GET -> { pseudo, entries }
 // Requires Authorization: Bearer <token>
@@ -16,12 +16,20 @@ export async function handler(event, context) {
   const session = await store.get(`session:${token}`, { type: "json" });
   if (!session?.pseudo || !session?.expires_at) return json(401, { error: "Invalid session" });
   if (Date.parse(session.expires_at) < Date.now()) return json(401, { error: "Session expired" });
+  const pseudoKey = String(session?.pseudo_key || normalizePseudo(session.pseudo)).trim();
+  const legacyPseudoKey = String(session.pseudo || "").trim();
 
-  const data =
-    (await store.get(`data:${session.pseudo}`, { type: "json" })) || ({
-      pseudo: session.pseudo,
-      entries: [],
-    });
+  if (!pseudoKey) return json(401, { error: "Invalid session" });
+
+  let data = await store.get(`data:${pseudoKey}`, { type: "json" });
+  if (!data && legacyPseudoKey && legacyPseudoKey !== pseudoKey) {
+    data = await store.get(`data:${legacyPseudoKey}`, { type: "json" });
+  }
+
+  data ||= {
+    pseudo: session.pseudo,
+    entries: [],
+  };
 
   return json(200, data);
 }
