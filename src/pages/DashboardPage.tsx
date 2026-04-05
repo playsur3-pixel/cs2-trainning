@@ -5,7 +5,12 @@ import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
 import { Card, CardContent, CardHeader, CardTitle } from "../components/Card";
 import { clearSession, getSession } from "../lib/auth";
-import { apiGetPlayer, apiSaveEntry, type Entry, type WeaponKey } from "../lib/api";
+import {
+  apiGetPlayer,
+  apiSaveEntry,
+  type Entry,
+  type WeaponKey,
+} from "../lib/api";
 import { profile } from "../data/profile";
 
 type DayDraft = {
@@ -48,7 +53,9 @@ function buildEmptyDraft(date: string): DayDraft {
 }
 
 function clampLast90Days(entries: Entry[]): Entry[] {
-  const dates = Array.from(new Set(entries.map((e) => e.date))).sort((a, b) => a.localeCompare(b));
+  const dates = Array.from(new Set(entries.map((e) => e.date))).sort((a, b) =>
+    a.localeCompare(b),
+  );
   const keepDates = new Set(dates.slice(-90));
   return entries.filter((e) => keepDates.has(e.date));
 }
@@ -92,14 +99,20 @@ function upsertEntriesFromDraft(entries: Entry[], draft: DayDraft): Entry[] {
 
   return clampLast90Days(
     [...filtered, ...additions].sort((a, b) =>
-      a.date === b.date ? a.weapon.localeCompare(b.weapon) : a.date.localeCompare(b.date)
-    )
+      a.date === b.date
+        ? a.weapon.localeCompare(b.weapon)
+        : a.date.localeCompare(b.date),
+    ),
   );
 }
 
 function formatGraphDate(dateStr: string) {
   const [year, month, day] = dateStr.split("-").map(Number);
-  if (!Number.isFinite(year) || !Number.isFinite(month) || !Number.isFinite(day)) {
+  if (
+    !Number.isFinite(year) ||
+    !Number.isFinite(month) ||
+    !Number.isFinite(day)
+  ) {
     return dateStr;
   }
 
@@ -114,7 +127,11 @@ function getLast7DaysStatus(entries: Entry[], todayIso: string) {
   const entryDates = new Set(entries.map((e) => e.date));
 
   const [year, month, day] = todayIso.split("-").map(Number);
-  if (!Number.isFinite(year) || !Number.isFinite(month) || !Number.isFinite(day)) {
+  if (
+    !Number.isFinite(year) ||
+    !Number.isFinite(month) ||
+    !Number.isFinite(day)
+  ) {
     return [];
   }
 
@@ -126,7 +143,7 @@ function getLast7DaysStatus(entries: Entry[], todayIso: string) {
     d.setDate(today.getDate() - (6 - index));
 
     const iso = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(
-      d.getDate()
+      d.getDate(),
     ).padStart(2, "0")}`;
 
     return {
@@ -152,13 +169,19 @@ function getDailyGraphData(entries: Entry[], weaponFilter: FilterValue) {
       let values: number[] = [];
 
       if (weaponFilter === "all") {
-        values = dayEntries.map((entry) => entry.kpm).filter((v): v is number => typeof v === "number");
+        values = dayEntries
+          .map((entry) => entry.kpm)
+          .filter((v): v is number => typeof v === "number");
       } else {
-        const weaponEntry = dayEntries.find((entry) => entry.weapon === weaponFilter);
+        const weaponEntry = dayEntries.find(
+          (entry) => entry.weapon === weaponFilter,
+        );
         values = typeof weaponEntry?.kpm === "number" ? [weaponEntry.kpm] : [];
       }
 
-      const avg = values.length ? values.reduce((sum, v) => sum + v, 0) / values.length : 0;
+      const avg = values.length
+        ? values.reduce((sum, v) => sum + v, 0) / values.length
+        : 0;
 
       return {
         date,
@@ -169,7 +192,7 @@ function getDailyGraphData(entries: Entry[], weaponFilter: FilterValue) {
 
 function getProgressSummary(
   entries: Entry[],
-  filter: FilterValue
+  filter: FilterValue,
 ): {
   firstValue: number | null;
   lastValue: number | null;
@@ -191,7 +214,9 @@ function getProgressSummary(
       let values: number[] = [];
 
       if (filter === "all") {
-        values = dayEntries.map((entry) => entry.kpm).filter((v): v is number => typeof v === "number");
+        values = dayEntries
+          .map((entry) => entry.kpm)
+          .filter((v): v is number => typeof v === "number");
       } else {
         const weaponEntry = dayEntries.find((entry) => entry.weapon === filter);
         if (typeof weaponEntry?.kpm === "number") {
@@ -202,7 +227,11 @@ function getProgressSummary(
       return values.length
         ? {
             date,
-            value: Number((values.reduce((sum, v) => sum + v, 0) / values.length).toFixed(2)),
+            value: Number(
+              (values.reduce((sum, v) => sum + v, 0) / values.length).toFixed(
+                2,
+              ),
+            ),
           }
         : null;
     })
@@ -225,7 +254,9 @@ function getProgressSummary(
   const lastValue = relevantDays[relevantDays.length - 1].value;
 
   const deltaPercent =
-    firstValue > 0 ? Number((((lastValue - firstValue) / firstValue) * 100).toFixed(1)) : null;
+    firstValue > 0
+      ? Number((((lastValue - firstValue) / firstValue) * 100).toFixed(1))
+      : null;
 
   return {
     firstValue,
@@ -244,7 +275,9 @@ function getExportRows(entries: Entry[]): ExportRow[] {
   return clampLast90Days(entries)
     .slice()
     .sort((a, b) =>
-      a.date === b.date ? a.weapon.localeCompare(b.weapon) : b.date.localeCompare(a.date)
+      a.date === b.date
+        ? a.weapon.localeCompare(b.weapon)
+        : b.date.localeCompare(a.date),
     )
     .map((entry) => ({
       date: entry.date,
@@ -265,26 +298,37 @@ function downloadBlob(blob: Blob, filename: string) {
   URL.revokeObjectURL(url);
 }
 
-async function svgElementToPngDataUrl(svgElement: SVGSVGElement): Promise<string> {
+async function svgElementToPngDataUrl(
+  svgElement: SVGSVGElement,
+): Promise<string> {
   const clonedSvg = svgElement.cloneNode(true) as SVGSVGElement;
   clonedSvg.setAttribute("xmlns", "http://www.w3.org/2000/svg");
 
   const viewBox = svgElement.viewBox.baseVal;
-  const width = Math.max(Math.round(viewBox?.width || svgElement.clientWidth || 1000), 1);
-  const height = Math.max(Math.round(viewBox?.height || svgElement.clientHeight || 420), 1);
+  const width = Math.max(
+    Math.round(viewBox?.width || svgElement.clientWidth || 1000),
+    1,
+  );
+  const height = Math.max(
+    Math.round(viewBox?.height || svgElement.clientHeight || 420),
+    1,
+  );
 
   clonedSvg.setAttribute("width", String(width));
   clonedSvg.setAttribute("height", String(height));
 
   const serialized = new XMLSerializer().serializeToString(clonedSvg);
-  const svgBlob = new Blob([serialized], { type: "image/svg+xml;charset=utf-8" });
+  const svgBlob = new Blob([serialized], {
+    type: "image/svg+xml;charset=utf-8",
+  });
   const svgUrl = URL.createObjectURL(svgBlob);
 
   try {
     const img = await new Promise<HTMLImageElement>((resolve, reject) => {
       const nextImg = new Image();
       nextImg.onload = () => resolve(nextImg);
-      nextImg.onerror = () => reject(new Error("Impossible de convertir le graphique."));
+      nextImg.onerror = () =>
+        reject(new Error("Impossible de convertir le graphique."));
       nextImg.src = svgUrl;
     });
 
@@ -326,10 +370,12 @@ function MiniLineChart({
       </div>
     );
   }
+  const MIN_Y = 30;
+  const MAX_Y = 130;
 
-  const maxValue = Math.max(...data.map((d) => d.value), 1);
-  const minValue = Math.min(...data.map((d) => d.value), 0);
-  const range = Math.max(maxValue - minValue, 1);
+  const minValue = MIN_Y;
+  const maxValue = MAX_Y;
+  const range = MAX_Y - MIN_Y; // = 100
 
   const points = data.map((d, index) => {
     const x =
@@ -337,12 +383,17 @@ function MiniLineChart({
         ? width / 2
         : padding + (index * (width - padding * 2)) / (data.length - 1);
 
-    const y = height - padding - ((d.value - minValue) / range) * (height - padding * 2);
+    const y =
+      height -
+      padding -
+      ((d.value - minValue) / range) * (height - padding * 2);
 
     return { x, y, ...d };
   });
 
-  const path = points.map((p, i) => `${i === 0 ? "M" : "L"} ${p.x} ${p.y}`).join(" ");
+  const path = points
+    .map((p, i) => `${i === 0 ? "M" : "L"} ${p.x} ${p.y}`)
+    .join(" ");
 
   const horizontalLines = Array.from({ length: 5 }, (_, i) => {
     const ratio = i / 4;
@@ -418,18 +469,20 @@ export function DashboardPage() {
   const [status, setStatus] = useState<string | null>(null);
   const [filter, setFilter] = useState<FilterValue>("all");
   const [isSaving, setIsSaving] = useState(false);
-  const [isExporting, setIsExporting] = useState<null | "json" | "xlsx" | "pdf">(null);
+  const [isExporting, setIsExporting] = useState<
+    null | "json" | "xlsx" | "pdf"
+  >(null);
 
   const todayIso = useMemo(() => {
     const now = new Date();
     return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(
-      now.getDate()
+      now.getDate(),
     ).padStart(2, "0")}`;
   }, []);
 
   const last7DaysStatus = useMemo(
     () => getLast7DaysStatus(entries, todayIso),
-    [entries, todayIso]
+    [entries, todayIso],
   );
 
   useEffect(() => {
@@ -443,7 +496,9 @@ export function DashboardPage() {
 
       try {
         const r = await apiGetPlayer(session);
-        data = Array.isArray(r.entries) ? clampLast90Days(r.entries as Entry[]) : [];
+        data = Array.isArray(r.entries)
+          ? clampLast90Days(r.entries as Entry[])
+          : [];
       } catch {
         data = await loadEntriesLocal(session.pseudo);
       }
@@ -477,7 +532,9 @@ export function DashboardPage() {
 
       try {
         const r = await apiGetPlayer(session);
-        const fresh = Array.isArray(r.entries) ? clampLast90Days(r.entries as Entry[]) : [];
+        const fresh = Array.isArray(r.entries)
+          ? clampLast90Days(r.entries as Entry[])
+          : [];
         setEntries(fresh);
         setTodayDraft(entriesToDayDraft(fresh, todayIso));
       } catch {
@@ -504,11 +561,14 @@ export function DashboardPage() {
     nav("/", { replace: true });
   }
 
-  const graphData = useMemo(() => getDailyGraphData(entries, filter), [entries, filter]);
+  const graphData = useMemo(
+    () => getDailyGraphData(entries, filter),
+    [entries, filter],
+  );
 
   const progressSummary = useMemo(
     () => getProgressSummary(entries, filter),
-    [entries, filter]
+    [entries, filter],
   );
 
   const exportRows = useMemo(() => getExportRows(entries), [entries]);
@@ -626,7 +686,7 @@ export function DashboardPage() {
         new Blob([buffer], {
           type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         }),
-        `playsure-kpm-${pseudo || "player"}-${todayIso}.xlsx`
+        `playsure-kpm-${pseudo || "player"}-${todayIso}.xlsx`,
       );
 
       setStatus("Export XLSX téléchargé ✅");
@@ -642,7 +702,11 @@ export function DashboardPage() {
   async function handleExportPdf() {
     setIsExporting("pdf");
     try {
-      const pdf = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" });
+      const pdf = new jsPDF({
+        orientation: "portrait",
+        unit: "mm",
+        format: "a4",
+      });
       const margin = 12;
       const pageWidth = pdf.internal.pageSize.getWidth();
       const contentWidth = pageWidth - margin * 2;
@@ -652,10 +716,10 @@ export function DashboardPage() {
       pdf.setFontSize(10);
       pdf.text(
         `Vue : ${filter === "all" ? "Tous" : getWeaponLabel(filter)} · Export : ${new Date().toLocaleString(
-          "fr-FR"
+          "fr-FR",
         )}`,
         margin,
-        22
+        22,
       );
 
       pdf.setFontSize(9);
@@ -668,7 +732,7 @@ export function DashboardPage() {
           progressSummary.lastValue ?? "N/A"
         } | Jours enregistrés : ${progressSummary.recordedDays}`,
         margin,
-        28
+        28,
       );
 
       const svgElement = graphSvgRef.current;
@@ -683,7 +747,11 @@ export function DashboardPage() {
       autoTable(pdf, {
         startY,
         head: [["Date", "Arme", "KPM"]],
-        body: exportRows.map((row) => [row.date, row.weaponLabel, row.kpm === null ? "—" : row.kpm.toFixed(2)]),
+        body: exportRows.map((row) => [
+          row.date,
+          row.weaponLabel,
+          row.kpm === null ? "—" : row.kpm.toFixed(2),
+        ]),
         margin: { left: margin, right: margin },
         styles: { fontSize: 9, cellPadding: 2 },
         headStyles: { fillColor: [42, 45, 62] },
@@ -717,7 +785,9 @@ export function DashboardPage() {
 
             <div className="min-w-0">
               <div className="truncate text-lg font-semibold">{pseudo}</div>
-              <div className="truncate text-sm text-muted">Suivi d'entraînement CS2 — 90 jours</div>
+              <div className="truncate text-sm text-muted">
+                Suivi d'entraînement CS2 — 90 jours
+              </div>
             </div>
           </div>
 
@@ -747,7 +817,11 @@ export function DashboardPage() {
                     ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-300"
                     : "border-border/50 bg-card/30 text-muted"
                 }`}
-                title={day.hasEntry ? "Entraînement enregistré" : "Aucun entraînement enregistré"}
+                title={
+                  day.hasEntry
+                    ? "Entraînement enregistré"
+                    : "Aucun entraînement enregistré"
+                }
               >
                 {day.label} · {day.hasEntry ? "Fait" : "Non fait"}
               </div>
@@ -761,7 +835,8 @@ export function DashboardPage() {
           <CardHeader>
             <CardTitle>Saisie du jour — {todayIso}</CardTitle>
             <div className="text-sm text-muted">
-              Renseigne le KPM du jour pour chaque arme, puis enregistre la journée.
+              Renseigne le KPM du jour pour chaque arme, puis enregistre la
+              journée.
             </div>
           </CardHeader>
 
@@ -776,7 +851,10 @@ export function DashboardPage() {
               <>
                 <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
                   {WEAPONS.map(({ key, label }) => (
-                    <div key={key} className="rounded-xl border border-border/50 bg-bg/20 p-3">
+                    <div
+                      key={key}
+                      className="rounded-xl border border-border/50 bg-bg/20 p-3"
+                    >
                       <div className="mb-2 text-sm font-semibold">{label}</div>
 
                       <label className="grid gap-1 text-sm">
@@ -793,10 +871,13 @@ export function DashboardPage() {
                                     ...prev,
                                     values: {
                                       ...prev.values,
-                                      [key]: e.target.value === "" ? null : Number(e.target.value),
+                                      [key]:
+                                        e.target.value === ""
+                                          ? null
+                                          : Number(e.target.value),
                                     },
                                   }
-                                : prev
+                                : prev,
                             )
                           }
                           className="rounded-lg border border-border/60 bg-card/50 px-2.5 py-1.5 text-sm outline-none focus:border-cs2/60"
@@ -815,7 +896,9 @@ export function DashboardPage() {
                     {isSaving ? "Enregistrement..." : "Enregistrer la journée"}
                   </button>
 
-                  <div className="text-sm text-muted">Historique conservé : 90 jours glissants</div>
+                  <div className="text-sm text-muted">
+                    Historique conservé : 90 jours glissants
+                  </div>
                 </div>
               </>
             ) : null}
@@ -828,7 +911,8 @@ export function DashboardPage() {
           <CardHeader>
             <CardTitle>Exports</CardTitle>
             <div className="text-sm text-muted">
-              JSON brut, XLSX avec graphique + tableau, ou PDF avec graphique puis tableau complet des 90 jours.
+              JSON brut, XLSX avec graphique + tableau, ou PDF avec graphique
+              puis tableau complet des 90 jours.
             </div>
           </CardHeader>
 
@@ -867,7 +951,8 @@ export function DashboardPage() {
           <CardHeader>
             <CardTitle>Progression</CardTitle>
             <div className="text-sm text-muted">
-              Filtre par arme ou vue globale. Les exports reprennent ce graphique en tête.
+              Filtre par arme ou vue globale. Les exports reprennent ce
+              graphique en tête.
             </div>
           </CardHeader>
 
@@ -915,14 +1000,16 @@ export function DashboardPage() {
 
                 <div className="mt-4 space-y-3 text-sm">
                   <div className="rounded-xl border border-border/40 bg-card/30 p-3">
-                    <div className="text-xs uppercase tracking-wide text-muted">Progression</div>
+                    <div className="text-xs uppercase tracking-wide text-muted">
+                      Progression
+                    </div>
                     <div
                       className={`mt-1 text-lg font-semibold ${
                         progressSummary.deltaPercent === null
                           ? "text-muted"
                           : progressSummary.deltaPercent >= 0
-                          ? "text-emerald-300"
-                          : "text-red-300"
+                            ? "text-emerald-300"
+                            : "text-red-300"
                       }`}
                     >
                       {progressSummary.deltaPercent === null
@@ -932,27 +1019,43 @@ export function DashboardPage() {
                   </div>
 
                   <div className="rounded-xl border border-border/40 bg-card/30 p-3">
-                    <div className="text-xs uppercase tracking-wide text-muted">Premier relevé</div>
+                    <div className="text-xs uppercase tracking-wide text-muted">
+                      Premier relevé
+                    </div>
                     <div className="mt-1 text-sm font-medium">
-                      {progressSummary.firstValue === null ? "N/A" : progressSummary.firstValue}
+                      {progressSummary.firstValue === null
+                        ? "N/A"
+                        : progressSummary.firstValue}
                     </div>
                   </div>
 
                   <div className="rounded-xl border border-border/40 bg-card/30 p-3">
-                    <div className="text-xs uppercase tracking-wide text-muted">Dernier relevé</div>
+                    <div className="text-xs uppercase tracking-wide text-muted">
+                      Dernier relevé
+                    </div>
                     <div className="mt-1 text-sm font-medium">
-                      {progressSummary.lastValue === null ? "N/A" : progressSummary.lastValue}
+                      {progressSummary.lastValue === null
+                        ? "N/A"
+                        : progressSummary.lastValue}
                     </div>
                   </div>
 
                   <div className="rounded-xl border border-border/40 bg-card/30 p-3">
-                    <div className="text-xs uppercase tracking-wide text-muted">Jours enregistrés</div>
-                    <div className="mt-1 text-sm font-medium">{progressSummary.recordedDays}</div>
+                    <div className="text-xs uppercase tracking-wide text-muted">
+                      Jours enregistrés
+                    </div>
+                    <div className="mt-1 text-sm font-medium">
+                      {progressSummary.recordedDays}
+                    </div>
                   </div>
 
                   <div className="rounded-xl border border-border/40 bg-card/30 p-3">
-                    <div className="text-xs uppercase tracking-wide text-muted">Jours manquants</div>
-                    <div className="mt-1 text-sm font-medium">{progressSummary.missingDays}</div>
+                    <div className="text-xs uppercase tracking-wide text-muted">
+                      Jours manquants
+                    </div>
+                    <div className="mt-1 text-sm font-medium">
+                      {progressSummary.missingDays}
+                    </div>
                   </div>
                 </div>
               </aside>
