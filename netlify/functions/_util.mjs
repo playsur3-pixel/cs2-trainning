@@ -13,6 +13,19 @@ export function json(statusCode, body, headers = {}) {
   };
 }
 
+export function bearerToken(event) {
+  const header =
+    event?.headers?.authorization ||
+    event?.headers?.Authorization ||
+    "";
+  const match = /^Bearer\s+(.+)$/i.exec(String(header).trim());
+  return match?.[1] || "";
+}
+
+export function randomToken(size = 32) {
+  return crypto.randomBytes(size).toString("hex");
+}
+
 export function sha256(input) {
   return crypto.createHash("sha256").update(String(input)).digest("hex");
 }
